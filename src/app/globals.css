@@ -1,8 +1,25 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Procore Brand Colors */
+  --procore-orange: #FF5201;
+  --procore-orange-hover: #E14504;
+  --procore-orange-light: #FF6C00;
+  --procore-black: #000000;
+  --procore-gray: #595552;
+  --procore-gray-light: #F5F1ED;
+  --procore-white: #FFFFFF;
+
+  /* Experience Colors */
+  --experience-exceeded: #4CAF50;
+  --experience-met: #FFC107;
+  --experience-below: #FF9800;
+  --experience-unusable: #F44336;
+  --experience-na: #9E9E9E;
+
+  /* App Colors */
+  --background: #FFFFFF;
+  --foreground: #000000;
 }
 
 @theme inline {
@@ -10,17 +27,53 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Procore Colors */
+  --color-procore-orange: var(--procore-orange);
+  --color-procore-orange-hover: var(--procore-orange-hover);
+  --color-procore-orange-light: var(--procore-orange-light);
+  --color-procore-black: var(--procore-black);
+  --color-procore-gray: var(--procore-gray);
+  --color-procore-gray-light: var(--procore-gray-light);
+  --color-procore-white: var(--procore-white);
+
+  /* Experience Colors */
+  --color-exceeded: var(--experience-exceeded);
+  --color-met: var(--experience-met);
+  --color-below: var(--experience-below);
+  --color-unusable: var(--experience-unusable);
+  --color-na: var(--experience-na);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Custom utility classes */
+.btn-primary {
+  background-color: var(--procore-orange);
+  color: white;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.375rem;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.btn-primary:hover {
+  background-color: var(--procore-orange-hover);
+}
+
+.btn-secondary {
+  background-color: var(--procore-gray-light);
+  color: var(--procore-black);
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.375rem;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.btn-secondary:hover {
+  background-color: #E8E4E0;
 }
