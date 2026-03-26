@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 const TEST_PLATFORMS = [
   'Android',
@@ -23,6 +24,7 @@ export default function SetupPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [formData, setFormData] = useState({
+    email: '',
     company: '',
     name: '',
     projectUrl: '',
@@ -81,6 +83,7 @@ export default function SetupPage() {
   };
 
   const isFormValid =
+    formData.email &&
     formData.company &&
     formData.name &&
     formData.testPlatform &&
@@ -104,6 +107,23 @@ export default function SetupPage() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Email */}
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-[var(--procore-gray)] mb-2">
+                Email Address <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="email"
+                id="email"
+                name="email"
+                value={formData.email}
+                onChange={handleChange}
+                placeholder="Enter your email"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--procore-orange)] focus:border-transparent"
+                required
+              />
+            </div>
+
             {/* Company */}
             <div>
               <label htmlFor="company" className="block text-sm font-medium text-[var(--procore-gray)] mb-2">
@@ -226,6 +246,15 @@ export default function SetupPage() {
               {loading ? 'Saving...' : 'Continue to Feedback'}
             </button>
           </form>
+
+          <div className="mt-6 text-center">
+            <p className="text-sm text-[var(--procore-gray)]">
+              Already registered?{' '}
+              <Link href="/login" className="text-[var(--procore-orange)] hover:underline">
+                Login here
+              </Link>
+            </p>
+          </div>
         </div>
       </div>
     </main>

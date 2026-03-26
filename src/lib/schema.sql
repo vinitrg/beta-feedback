@@ -2,6 +2,7 @@
 CREATE TABLE IF NOT EXISTS testers (
   id SERIAL PRIMARY KEY,
   session_id VARCHAR(255) UNIQUE NOT NULL,
+  email VARCHAR(255),
   company VARCHAR(255),
   name VARCHAR(255),
   project_url TEXT,
@@ -10,6 +11,9 @@ CREATE TABLE IF NOT EXISTS testers (
   device_browser TEXT,
   created_at TIMESTAMP DEFAULT NOW()
 );
+
+-- Index for email lookups (used for login)
+CREATE INDEX IF NOT EXISTS idx_testers_email ON testers(email);
 
 -- Test Cases (synced from Google Sheets)
 CREATE TABLE IF NOT EXISTS test_cases (
@@ -35,7 +39,32 @@ CREATE TABLE IF NOT EXISTS test_feedback (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- General Feedback
+CREATE TABLE IF NOT EXISTS general_feedback (
+  id SERIAL PRIMARY KEY,
+  tester_id INTEGER REFERENCES testers(id) ON DELETE CASCADE,
+  category VARCHAR(100),
+  priority VARCHAR(50),
+  description TEXT,
+  media_urls TEXT[],
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Feature Requests
+CREATE TABLE IF NOT EXISTS feature_requests (
+  id SERIAL PRIMARY KEY,
+  tester_id INTEGER REFERENCES testers(id) ON DELETE CASCADE,
+  title VARCHAR(255),
+  description TEXT,
+  priority VARCHAR(50),
+  use_case TEXT,
+  media_urls TEXT[],
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
 -- Indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_test_cases_category ON test_cases(category);
 CREATE INDEX IF NOT EXISTS idx_test_feedback_tester_id ON test_feedback(tester_id);
 CREATE INDEX IF NOT EXISTS idx_test_feedback_test_case_id ON test_feedback(test_case_id);
+CREATE INDEX IF NOT EXISTS idx_general_feedback_tester_id ON general_feedback(tester_id);
+CREATE INDEX IF NOT EXISTS idx_feature_requests_tester_id ON feature_requests(tester_id);

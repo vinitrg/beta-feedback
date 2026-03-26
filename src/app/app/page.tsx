@@ -4,8 +4,11 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import TabNavigation, { Tab } from '@/components/TabNavigation';
 import TestCasesTab from '@/features/test-cases/TestCasesTab';
+import GeneralFeedbackTab from '@/features/general-feedback/GeneralFeedbackTab';
+import FeatureRequestsTab from '@/features/feature-requests/FeatureRequestsTab';
 
 interface TesterInfo {
+  email?: string;
   company: string;
   name: string;
   projectUrl: string;
@@ -13,6 +16,14 @@ interface TesterInfo {
   languageTested: string;
   deviceBrowser: string;
 }
+
+const TEST_PLATFORMS = [
+  'Android',
+  'iOS',
+  'Web',
+  'Android+Web',
+  'iOS+Web',
+];
 
 export default function AppPage() {
   const router = useRouter();
@@ -39,7 +50,8 @@ export default function AppPage() {
     }
 
     if (storedInfo) {
-      setTesterInfo(JSON.parse(storedInfo));
+      const parsedInfo = JSON.parse(storedInfo);
+      setTesterInfo(parsedInfo);
     }
 
     // Fetch tester ID from backend
@@ -64,6 +76,14 @@ export default function AppPage() {
 
     fetchTesterId();
   }, [router]);
+
+  const handlePlatformChange = (newPlatform: string) => {
+    if (!testerInfo) return;
+
+    const updatedInfo = { ...testerInfo, testPlatform: newPlatform };
+    setTesterInfo(updatedInfo);
+    localStorage.setItem('tester_info', JSON.stringify(updatedInfo));
+  };
 
   if (loading) {
     return (
@@ -94,17 +114,38 @@ export default function AppPage() {
                 )}
               </div>
             </div>
-            <button
-              onClick={() => {
-                localStorage.removeItem('tester_session_id');
-                localStorage.removeItem('tester_info');
-                sessionStorage.removeItem('beta_access');
-                router.push('/');
-              }}
-              className="text-sm text-[var(--procore-gray)] hover:text-[var(--procore-black)]"
-            >
-              Sign Out
-            </button>
+            <div className="flex items-center space-x-4">
+              {testerInfo && (
+                <div className="flex items-center space-x-2">
+                  <label htmlFor="platform-select" className="text-sm text-[var(--procore-gray)]">
+                    Platform:
+                  </label>
+                  <select
+                    id="platform-select"
+                    value={testerInfo.testPlatform}
+                    onChange={(e) => handlePlatformChange(e.target.value)}
+                    className="text-sm px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[var(--procore-orange)] bg-white"
+                  >
+                    {TEST_PLATFORMS.map((platform) => (
+                      <option key={platform} value={platform}>
+                        {platform}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <button
+                onClick={() => {
+                  localStorage.removeItem('tester_session_id');
+                  localStorage.removeItem('tester_info');
+                  sessionStorage.removeItem('beta_access');
+                  router.push('/');
+                }}
+                className="text-sm text-[var(--procore-gray)] hover:text-[var(--procore-black)]"
+              >
+                Sign Out
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -120,16 +161,8 @@ export default function AppPage() {
       <main className="max-w-7xl mx-auto px-4 py-8">
         <div className="bg-white rounded-lg shadow-sm p-6">
           {activeTab === 'test-cases' && <TestCasesTab testerId={testerId} />}
-          {activeTab === 'general-feedback' && (
-            <div className="text-center py-8 text-[var(--procore-gray)]">
-              General Feedback feature coming soon...
-            </div>
-          )}
-          {activeTab === 'feature-requests' && (
-            <div className="text-center py-8 text-[var(--procore-gray)]">
-              Feature Requests feature coming soon...
-            </div>
-          )}
+          {activeTab === 'general-feedback' && <GeneralFeedbackTab testerId={testerId} />}
+          {activeTab === 'feature-requests' && <FeatureRequestsTab testerId={testerId} />}
         </div>
       </main>
     </div>

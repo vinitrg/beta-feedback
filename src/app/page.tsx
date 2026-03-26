@@ -29,7 +29,7 @@ export default function AccessPage() {
         if (data.role === 'admin') {
           sessionStorage.setItem('is_admin', 'true');
         }
-        router.push('/setup');
+        router.push('/welcome');
       } else {
         setError('Invalid access code. Please try again.');
       }

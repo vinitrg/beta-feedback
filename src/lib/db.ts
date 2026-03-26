@@ -24,6 +24,7 @@ export const sql = (strings: TemplateStringsArray, ...values: unknown[]) => {
 export type Tester = {
   id: number;
   session_id: string;
+  email: string | null;
   company: string;
   name: string;
   project_url: string;
@@ -51,5 +52,26 @@ export type TestFeedback = {
   experience: string;
   ga_priority: string;
   comments: string;
+  created_at: Date;
+};
+
+export type GeneralFeedback = {
+  id: number;
+  tester_id: number;
+  category: string;
+  priority: string;
+  description: string;
+  media_urls: string[];
+  created_at: Date;
+};
+
+export type FeatureRequest = {
+  id: number;
+  tester_id: number;
+  title: string;
+  description: string;
+  priority: string;
+  use_case: string;
+  media_urls: string[];
   created_at: Date;
 };

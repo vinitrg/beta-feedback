@@ -6,15 +6,15 @@ import { randomUUID } from 'crypto';
 const isDemoMode = !process.env.DATABASE_URL;
 
 // In-memory storage for demo mode
-const demoTesters: Map<string, { id: number; session_id: string; company: string; name: string }> = new Map();
+const demoTesters: Map<string, { id: number; session_id: string; email: string; company: string; name: string }> = new Map();
 let demoTesterId = 1;
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { company, name, projectUrl, testPlatform, languageTested, deviceBrowser } = body;
+    const { email, company, name, projectUrl, testPlatform, languageTested, deviceBrowser } = body;
 
-    if (!company || !name || !testPlatform || !languageTested) {
+    if (!email || !company || !name || !testPlatform || !languageTested) {
       return NextResponse.json(
         { success: false, error: 'Missing required fields' },
         { status: 400 }
@@ -27,6 +27,7 @@ export async function POST(request: NextRequest) {
       const tester = {
         id: demoTesterId++,
         session_id: sessionId,
+        email,
         company,
         name,
       };
@@ -35,8 +36,8 @@ export async function POST(request: NextRequest) {
     }
 
     await sql`
-      INSERT INTO testers (session_id, company, name, project_url, test_platform, language_tested, device_browser)
-      VALUES (${sessionId}, ${company}, ${name}, ${projectUrl || null}, ${testPlatform}, ${languageTested}, ${deviceBrowser || null})
+      INSERT INTO testers (session_id, email, company, name, project_url, test_platform, language_tested, device_browser)
+      VALUES (${sessionId}, ${email}, ${company}, ${name}, ${projectUrl || null}, ${testPlatform}, ${languageTested}, ${deviceBrowser || null})
     `;
 
     return NextResponse.json({ success: true, sessionId });
