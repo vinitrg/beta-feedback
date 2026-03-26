@@ -1,11 +1,16 @@
 import { google } from 'googleapis';
 
+export interface SheetInfo {
+  id: number;
+  title: string;
+}
+
 export interface SheetRow {
   what: string;
   testStep: string;
   systemBehaviour: string;
   rowIndex: number;
-  rowColor?: string; // 'green' for feature, 'yellow' for sub-feature, undefined for test step
+  rowColor?: string;
 }
 
 export interface ParsedTestCase {
@@ -14,16 +19,15 @@ export interface ParsedTestCase {
   testStep: string;
   systemBehaviour: string;
   sheetRowIndex: number;
+  sheetName: string;
 }
 
-// Color detection thresholds (RGB values 0-1)
-// More lenient detection for various shades of green and yellow
+// Color detection - more lenient for various shades
 const isGreen = (r: number, g: number, b: number) => {
-  // Green: high green, lower red and blue
   return g > 0.5 && g > r && g > b;
 };
+
 const isYellow = (r: number, g: number, b: number) => {
-  // Yellow: high red AND green, low blue
   return r > 0.7 && g > 0.7 && b < 0.7 && Math.abs(r - g) < 0.3;
 };
 
@@ -44,14 +48,29 @@ export async function getGoogleSheetsClient() {
   return google.sheets({ version: 'v4', auth });
 }
 
-export async function fetchSheetData(sheetId: string): Promise<SheetRow[]> {
+// Get list of all sheets in the spreadsheet
+export async function getSheetList(sheetId: string): Promise<SheetInfo[]> {
   const sheets = await getGoogleSheetsClient();
 
-  // Get sheet data with formatting
   const response = await sheets.spreadsheets.get({
     spreadsheetId: sheetId,
+  });
+
+  const sheetTabs = response.data.sheets || [];
+  return sheetTabs.map((sheet) => ({
+    id: sheet.properties?.sheetId || 0,
+    title: sheet.properties?.title || 'Unknown',
+  }));
+}
+
+// Fetch data from a specific sheet
+export async function fetchSheetData(spreadsheetId: string, sheetName: string): Promise<SheetRow[]> {
+  const sheets = await getGoogleSheetsClient();
+
+  const response = await sheets.spreadsheets.get({
+    spreadsheetId,
     includeGridData: true,
-    ranges: ['A:C'], // What, Test Step, System behaviour columns
+    ranges: [`'${sheetName}'!A:C`],
   });
 
   const sheetData = response.data.sheets?.[0]?.data?.[0];
@@ -61,17 +80,16 @@ export async function fetchSheetData(sheetId: string): Promise<SheetRow[]> {
 
   const rows: SheetRow[] = [];
 
-  // Skip header row (index 0)
-  for (let i = 1; i < sheetData.rowData.length; i++) {
+  // Skip header rows (1-5), start from row 6 (index 5)
+  for (let i = 5; i < sheetData.rowData.length; i++) {
     const row = sheetData.rowData[i];
     const cells = row.values || [];
 
-    // Get cell values
     const what = cells[0]?.formattedValue || '';
     const testStep = cells[1]?.formattedValue || '';
     const systemBehaviour = cells[2]?.formattedValue || '';
 
-    // Skip empty rows
+    // Skip completely empty rows
     if (!what && !testStep && !systemBehaviour) {
       continue;
     }
@@ -95,7 +113,7 @@ export async function fetchSheetData(sheetId: string): Promise<SheetRow[]> {
       what,
       testStep,
       systemBehaviour,
-      rowIndex: i + 1, // 1-indexed for human readability
+      rowIndex: i + 1,
       rowColor,
     });
   }
@@ -103,56 +121,78 @@ export async function fetchSheetData(sheetId: string): Promise<SheetRow[]> {
   return rows;
 }
 
-export function parseTestCases(rows: SheetRow[]): ParsedTestCase[] {
+export function parseTestCases(rows: SheetRow[], sheetName: string): ParsedTestCase[] {
   const testCases: ParsedTestCase[] = [];
   let currentCategory = '';
   let currentSubcategory = '';
 
   for (const row of rows) {
     // Green row = new category (feature)
+    // Could have content in "what" column or "testStep" column (as description)
     if (row.rowColor === 'green') {
-      currentCategory = row.what;
-      currentSubcategory = '';
+      if (row.what) {
+        currentCategory = row.what;
+        currentSubcategory = '';
+      }
+      // If testStep has content on green row, it might be a subcategory description
+      if (row.testStep && !row.systemBehaviour) {
+        currentSubcategory = row.testStep;
+      }
       continue;
     }
 
-    // Yellow row = new subcategory (workflow/sub-feature)
+    // Yellow row = subcategory
     if (row.rowColor === 'yellow') {
       currentSubcategory = row.what || row.testStep;
       continue;
     }
 
-    // Fallback: If "What" has content but Test Step is empty, it's likely a header
-    // This handles cases where color detection fails
+    // Check if this is a header-like row (has "what" but no test step details)
     if (row.what && !row.testStep && !row.systemBehaviour) {
-      // If we don't have a category yet, this is a category
+      // This might be a category or subcategory without color formatting
       if (!currentCategory) {
         currentCategory = row.what;
       } else {
-        // Otherwise it's a subcategory
         currentSubcategory = row.what;
       }
       continue;
     }
 
-    // Another fallback: "What" is empty but testStep has italic/description text (yellow row pattern)
-    if (!row.what && row.testStep && !row.systemBehaviour && row.rowColor !== 'green') {
-      // This might be a subcategory row where description is in testStep column
-      currentSubcategory = row.testStep;
-      continue;
-    }
-
-    // Regular row = test case (has test_step or system_behaviour)
+    // Regular test case row - must have testStep or systemBehaviour
     if (row.testStep || row.systemBehaviour) {
       testCases.push({
-        category: currentCategory || 'General',
+        category: currentCategory || sheetName,
         subcategory: currentSubcategory,
         testStep: row.testStep,
         systemBehaviour: row.systemBehaviour,
         sheetRowIndex: row.rowIndex,
+        sheetName,
       });
     }
   }
 
   return testCases;
+}
+
+// Fetch and parse all test cases from a specific sheet
+export async function syncSheet(spreadsheetId: string, sheetName: string): Promise<ParsedTestCase[]> {
+  const rows = await fetchSheetData(spreadsheetId, sheetName);
+  return parseTestCases(rows, sheetName);
+}
+
+// Fetch and parse all test cases from all sheets
+export async function syncAllSheets(spreadsheetId: string): Promise<ParsedTestCase[]> {
+  const sheetList = await getSheetList(spreadsheetId);
+  const allTestCases: ParsedTestCase[] = [];
+
+  for (const sheet of sheetList) {
+    try {
+      const testCases = await syncSheet(spreadsheetId, sheet.title);
+      allTestCases.push(...testCases);
+    } catch (error) {
+      console.error(`Error syncing sheet ${sheet.title}:`, error);
+    }
+  }
+
+  return allTestCases;
 }

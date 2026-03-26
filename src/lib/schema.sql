@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS testers (
 -- Test Cases (synced from Google Sheets)
 CREATE TABLE IF NOT EXISTS test_cases (
   id SERIAL PRIMARY KEY,
+  sheet_name VARCHAR(255),
   category VARCHAR(255),
   subcategory VARCHAR(255),
   test_step TEXT,

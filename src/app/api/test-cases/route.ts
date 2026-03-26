@@ -1,41 +1,89 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
+import { syncAllSheets } from '@/features/sheets-sync/GoogleSheetsService';
 
 // Check if we're in demo mode
 const isDemoMode = !process.env.DATABASE_URL;
 
-// Demo data for testing without database
-const demoTestCases = [
-  { id: 1, category: 'Settings', subcategory: 'Measurement system', test_step: 'Click Settings', system_behaviour: 'The settings panel opens' },
-  { id: 2, category: 'Settings', subcategory: 'Measurement system', test_step: 'Click the "Measurement system" dropdown', system_behaviour: 'The options of Imperial, Metric (meters) and Metric (millimeters) shown' },
-  { id: 3, category: 'Settings', subcategory: 'Measurement system', test_step: 'Select your preferred measurement system', system_behaviour: 'Your preferred measurement system is selected' },
-  { id: 4, category: 'Settings', subcategory: 'Performance', test_step: 'Click Settings', system_behaviour: 'The settings panel opens' },
-  { id: 5, category: 'Settings', subcategory: 'Performance', test_step: 'Click the "Performance" dropdown', system_behaviour: 'The options of Low, Medium, High and Ultra shown' },
-  { id: 6, category: 'Settings', subcategory: 'Performance', test_step: 'Select your preferred performance tier', system_behaviour: 'Your preferred performance tier is selected' },
-  { id: 7, category: 'Settings', subcategory: 'Show in viewer', test_step: 'Click Settings', system_behaviour: 'The settings panel opens' },
-  { id: 8, category: 'Settings', subcategory: 'Show in viewer', test_step: 'Toggle on/off Navigation Sphere', system_behaviour: 'The Navigation sphere should be toggled on/off' },
-  { id: 9, category: 'Settings', subcategory: 'Show in viewer', test_step: 'Toggle on/off 2D mini map', system_behaviour: 'The 2D mini map should be toggled on/off' },
-];
-
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const sheetName = searchParams.get('sheet');
+
     if (isDemoMode) {
+      // In demo mode, fetch directly from Google Sheets
+      const sheetId = process.env.GOOGLE_SHEET_ID;
+      if (sheetId) {
+        try {
+          const testCases = await syncAllSheets(sheetId);
+
+          // Filter by sheet if specified
+          const filtered = sheetName
+            ? testCases.filter(tc => tc.sheetName === sheetName)
+            : testCases;
+
+          // Transform to match DB format
+          const formatted = filtered.map((tc, index) => ({
+            id: index + 1,
+            sheet_name: tc.sheetName,
+            category: tc.category,
+            subcategory: tc.subcategory,
+            test_step: tc.testStep,
+            system_behaviour: tc.systemBehaviour,
+            sheet_row_index: tc.sheetRowIndex,
+          }));
+
+          // Get unique sheet names
+          const sheets = [...new Set(testCases.map(tc => tc.sheetName))];
+
+          return NextResponse.json({
+            success: true,
+            testCases: formatted,
+            sheets,
+            isDemo: true,
+          });
+        } catch (error) {
+          console.error('Error fetching from Google Sheets:', error);
+        }
+      }
+
+      // Fallback demo data
       return NextResponse.json({
         success: true,
-        testCases: demoTestCases,
+        testCases: [],
+        sheets: [],
         isDemo: true,
+        message: 'Configure GOOGLE_SHEET_ID to see test cases',
       });
     }
 
-    const result = await sql`
-      SELECT id, category, subcategory, test_step, system_behaviour, sheet_row_index
-      FROM test_cases
-      ORDER BY sheet_row_index ASC
+    // Database mode
+    let result;
+    if (sheetName) {
+      result = await sql`
+        SELECT id, sheet_name, category, subcategory, test_step, system_behaviour, sheet_row_index
+        FROM test_cases
+        WHERE sheet_name = ${sheetName}
+        ORDER BY sheet_row_index ASC
+      `;
+    } else {
+      result = await sql`
+        SELECT id, sheet_name, category, subcategory, test_step, system_behaviour, sheet_row_index
+        FROM test_cases
+        ORDER BY sheet_name, sheet_row_index ASC
+      `;
+    }
+
+    // Get unique sheet names
+    const sheetsResult = await sql`
+      SELECT DISTINCT sheet_name FROM test_cases ORDER BY sheet_name
     `;
+    const sheets = sheetsResult.map((r: { sheet_name: string }) => r.sheet_name);
 
     return NextResponse.json({
       success: true,
       testCases: result,
+      sheets,
       isDemo: false,
     });
   } catch (error) {
