@@ -10,14 +10,6 @@ interface TestCase {
   system_behaviour: string;
 }
 
-interface TestCasesByCategory {
-  [category: string]: {
-    subcategories: {
-      [subcategory: string]: TestCase[];
-    };
-  };
-}
-
 interface FeedbackData {
   [testCaseId: number]: {
     experience: string;
@@ -28,11 +20,11 @@ interface FeedbackData {
 
 const EXPERIENCE_OPTIONS = [
   { value: '', label: 'Select...' },
-  { value: 'Exceeded Expectation', label: 'Exceeded Expectation', color: 'bg-green-500' },
-  { value: 'Met Expectation', label: 'Met Expectation', color: 'bg-yellow-400' },
-  { value: 'Below Expectation', label: 'Below Expectation', color: 'bg-orange-500' },
-  { value: 'Unusable', label: 'Unusable', color: 'bg-red-500' },
-  { value: 'n/a', label: 'n/a', color: 'bg-gray-400' },
+  { value: 'Exceeded Expectation', label: 'Exceeded Expectation' },
+  { value: 'Met Expectation', label: 'Met Expectation' },
+  { value: 'Below Expectation', label: 'Below Expectation' },
+  { value: 'Unusable', label: 'Unusable' },
+  { value: 'n/a', label: 'n/a' },
 ];
 
 const GA_PRIORITY_OPTIONS = [
@@ -46,10 +38,17 @@ interface TestCasesTabProps {
   testerId: number | null;
 }
 
+// Build a flat list of rows for table display
+interface TableRow {
+  type: 'category' | 'subcategory' | 'testcase';
+  category?: string;
+  subcategory?: string;
+  testCase?: TestCase;
+}
+
 export default function TestCasesTab({ testerId }: TestCasesTabProps) {
-  const [testCases, setTestCases] = useState<TestCasesByCategory>({});
+  const [tableRows, setTableRows] = useState<TableRow[]>([]);
   const [feedback, setFeedback] = useState<FeedbackData>({});
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -62,21 +61,30 @@ export default function TestCasesTab({ testerId }: TestCasesTabProps) {
         const res = await fetch('/api/test-cases');
         const data = await res.json();
         if (data.success) {
-          // Group test cases by category and subcategory
-          const grouped: TestCasesByCategory = {};
+          // Build flat table rows matching Google Sheet structure
+          const rows: TableRow[] = [];
+          let currentCategory = '';
+          let currentSubcategory = '';
+
           data.testCases.forEach((tc: TestCase) => {
-            if (!grouped[tc.category]) {
-              grouped[tc.category] = { subcategories: {} };
+            // Add category header if changed
+            if (tc.category && tc.category !== currentCategory) {
+              currentCategory = tc.category;
+              currentSubcategory = '';
+              rows.push({ type: 'category', category: tc.category });
             }
-            const subcat = tc.subcategory || 'General';
-            if (!grouped[tc.category].subcategories[subcat]) {
-              grouped[tc.category].subcategories[subcat] = [];
+
+            // Add subcategory header if changed
+            if (tc.subcategory && tc.subcategory !== currentSubcategory) {
+              currentSubcategory = tc.subcategory;
+              rows.push({ type: 'subcategory', subcategory: tc.subcategory });
             }
-            grouped[tc.category].subcategories[subcat].push(tc);
+
+            // Add test case row
+            rows.push({ type: 'testcase', testCase: tc });
           });
-          setTestCases(grouped);
-          // Expand all categories by default
-          setExpandedCategories(new Set(Object.keys(grouped)));
+
+          setTableRows(rows);
         }
       } catch (error) {
         console.error('Failed to fetch test cases:', error);
@@ -104,18 +112,6 @@ export default function TestCasesTab({ testerId }: TestCasesTabProps) {
     };
     fetchFeedback();
   }, [testerId]);
-
-  const toggleCategory = (category: string) => {
-    setExpandedCategories((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(category)) {
-        newSet.delete(category);
-      } else {
-        newSet.add(category);
-      }
-      return newSet;
-    });
-  };
 
   const updateFeedback = (testCaseId: number, field: string, value: string) => {
     setFeedback((prev) => ({
@@ -161,11 +157,6 @@ export default function TestCasesTab({ testerId }: TestCasesTabProps) {
     }
   };
 
-  const getExperienceColor = (value: string) => {
-    const option = EXPERIENCE_OPTIONS.find((o) => o.value === value);
-    return option?.color || '';
-  };
-
   if (loading) {
     return (
       <div className="text-center py-8 text-[var(--procore-gray)]">
@@ -174,7 +165,7 @@ export default function TestCasesTab({ testerId }: TestCasesTabProps) {
     );
   }
 
-  if (Object.keys(testCases).length === 0) {
+  if (tableRows.length === 0) {
     return (
       <div className="text-center py-8 text-[var(--procore-gray)]">
         No test cases available. Please contact an administrator to sync test cases from Google Sheets.
@@ -184,107 +175,105 @@ export default function TestCasesTab({ testerId }: TestCasesTabProps) {
 
   return (
     <div className="space-y-4">
-      {Object.entries(testCases).map(([category, { subcategories }]) => (
-        <div key={category} className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          {/* Category Header */}
-          <button
-            onClick={() => toggleCategory(category)}
-            className="w-full px-4 py-3 bg-[var(--procore-gray-light)] flex items-center justify-between text-left font-semibold text-[var(--procore-black)]"
-          >
-            <span>{category}</span>
-            <span className="text-[var(--procore-gray)]">
-              {expandedCategories.has(category) ? '▼' : '▶'}
-            </span>
-          </button>
+      {/* Spreadsheet-style table */}
+      <div className="overflow-x-auto border border-gray-300 rounded-lg">
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="bg-gray-100 border-b border-gray-300">
+              <th className="border-r border-gray-300 px-3 py-2 text-left font-semibold w-[180px]">What</th>
+              <th className="border-r border-gray-300 px-3 py-2 text-left font-semibold">Test Step</th>
+              <th className="border-r border-gray-300 px-3 py-2 text-left font-semibold">System behaviour</th>
+              <th className="border-r border-gray-300 px-3 py-2 text-left font-semibold w-[160px]">Experience</th>
+              <th className="border-r border-gray-300 px-3 py-2 text-left font-semibold w-[140px]">GA Priority</th>
+              <th className="px-3 py-2 text-left font-semibold w-[200px]">Comments</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tableRows.map((row, index) => {
+              // Category row (green)
+              if (row.type === 'category') {
+                return (
+                  <tr key={`cat-${index}`} className="bg-green-200">
+                    <td className="border-r border-b border-gray-300 px-3 py-2 font-bold text-gray-800">
+                      {row.category}
+                    </td>
+                    <td className="border-r border-b border-gray-300 px-3 py-2"></td>
+                    <td className="border-r border-b border-gray-300 px-3 py-2"></td>
+                    <td className="border-r border-b border-gray-300 px-3 py-2"></td>
+                    <td className="border-r border-b border-gray-300 px-3 py-2"></td>
+                    <td className="border-b border-gray-300 px-3 py-2"></td>
+                  </tr>
+                );
+              }
 
-          {/* Test Cases */}
-          {expandedCategories.has(category) && (
-            <div className="divide-y divide-gray-100">
-              {Object.entries(subcategories).map(([subcategory, cases]) => (
-                <div key={subcategory}>
-                  {subcategory !== 'General' && (
-                    <div className="px-4 py-2 bg-gray-50 text-sm font-medium text-[var(--procore-gray)] italic">
-                      {subcategory}
-                    </div>
-                  )}
-                  {cases.map((tc) => (
-                    <div key={tc.id} className="p-4 hover:bg-gray-50">
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-3">
-                        <div>
-                          <span className="text-xs font-medium text-[var(--procore-gray)] uppercase">
-                            Test Step
-                          </span>
-                          <p className="text-sm text-[var(--procore-black)] mt-1">
-                            {tc.test_step}
-                          </p>
-                        </div>
-                        <div>
-                          <span className="text-xs font-medium text-[var(--procore-gray)] uppercase">
-                            Expected Behaviour
-                          </span>
-                          <p className="text-sm text-[var(--procore-black)] mt-1">
-                            {tc.system_behaviour}
-                          </p>
-                        </div>
-                      </div>
+              // Subcategory row (yellow)
+              if (row.type === 'subcategory') {
+                return (
+                  <tr key={`sub-${index}`} className="bg-yellow-100">
+                    <td className="border-r border-b border-gray-300 px-3 py-2 font-semibold text-gray-700">
+                      {row.subcategory}
+                    </td>
+                    <td className="border-r border-b border-gray-300 px-3 py-2 italic text-gray-600"></td>
+                    <td className="border-r border-b border-gray-300 px-3 py-2"></td>
+                    <td className="border-r border-b border-gray-300 px-3 py-2"></td>
+                    <td className="border-r border-b border-gray-300 px-3 py-2"></td>
+                    <td className="border-b border-gray-300 px-3 py-2"></td>
+                  </tr>
+                );
+              }
 
-                      {/* Feedback Fields */}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3 pt-3 border-t border-gray-100">
-                        <div>
-                          <label className="text-xs font-medium text-[var(--procore-gray)]">
-                            Experience
-                          </label>
-                          <select
-                            value={feedback[tc.id]?.experience || ''}
-                            onChange={(e) => updateFeedback(tc.id, 'experience', e.target.value)}
-                            className={`w-full mt-1 px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-[var(--procore-orange)] ${
-                              feedback[tc.id]?.experience ? getExperienceColor(feedback[tc.id].experience) + ' text-white' : 'bg-white'
-                            }`}
-                          >
-                            {EXPERIENCE_OPTIONS.map((opt) => (
-                              <option key={opt.value} value={opt.value}>
-                                {opt.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="text-xs font-medium text-[var(--procore-gray)]">
-                            GA Priority
-                          </label>
-                          <select
-                            value={feedback[tc.id]?.gaPriority || ''}
-                            onChange={(e) => updateFeedback(tc.id, 'gaPriority', e.target.value)}
-                            className="w-full mt-1 px-3 py-2 border border-gray-300 rounded bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--procore-orange)]"
-                          >
-                            {GA_PRIORITY_OPTIONS.map((opt) => (
-                              <option key={opt.value} value={opt.value}>
-                                {opt.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="text-xs font-medium text-[var(--procore-gray)]">
-                            Comments
-                          </label>
-                          <input
-                            type="text"
-                            value={feedback[tc.id]?.comments || ''}
-                            onChange={(e) => updateFeedback(tc.id, 'comments', e.target.value)}
-                            placeholder="Optional comments..."
-                            className="w-full mt-1 px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-[var(--procore-orange)]"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
+              // Test case row (white)
+              const tc = row.testCase!;
+              return (
+                <tr key={tc.id} className="hover:bg-gray-50">
+                  <td className="border-r border-b border-gray-300 px-3 py-2"></td>
+                  <td className="border-r border-b border-gray-300 px-3 py-2 text-gray-800">
+                    {tc.test_step}
+                  </td>
+                  <td className="border-r border-b border-gray-300 px-3 py-2 text-gray-600 italic">
+                    {tc.system_behaviour}
+                  </td>
+                  <td className="border-r border-b border-gray-300 px-1 py-1">
+                    <select
+                      value={feedback[tc.id]?.experience || ''}
+                      onChange={(e) => updateFeedback(tc.id, 'experience', e.target.value)}
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-[var(--procore-orange)]"
+                    >
+                      {EXPERIENCE_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="border-r border-b border-gray-300 px-1 py-1">
+                    <select
+                      value={feedback[tc.id]?.gaPriority || ''}
+                      onChange={(e) => updateFeedback(tc.id, 'gaPriority', e.target.value)}
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-[var(--procore-orange)]"
+                    >
+                      {GA_PRIORITY_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="border-b border-gray-300 px-1 py-1">
+                    <input
+                      type="text"
+                      value={feedback[tc.id]?.comments || ''}
+                      onChange={(e) => updateFeedback(tc.id, 'comments', e.target.value)}
+                      placeholder="Comments..."
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[var(--procore-orange)]"
+                    />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
 
       {/* Submit Button */}
       <div className="flex items-center justify-between pt-4">
