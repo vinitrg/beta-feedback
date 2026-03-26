@@ -16,9 +16,16 @@ export interface ParsedTestCase {
   sheetRowIndex: number;
 }
 
-// Color detection thresholds (RGB values)
-const isGreen = (r: number, g: number, b: number) => g > 0.7 && r < 0.5 && b < 0.5;
-const isYellow = (r: number, g: number, b: number) => r > 0.8 && g > 0.8 && b < 0.5;
+// Color detection thresholds (RGB values 0-1)
+// More lenient detection for various shades of green and yellow
+const isGreen = (r: number, g: number, b: number) => {
+  // Green: high green, lower red and blue
+  return g > 0.5 && g > r && g > b;
+};
+const isYellow = (r: number, g: number, b: number) => {
+  // Yellow: high red AND green, low blue
+  return r > 0.7 && g > 0.7 && b < 0.7 && Math.abs(r - g) < 0.3;
+};
 
 export async function getGoogleSheetsClient() {
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
@@ -111,14 +118,34 @@ export function parseTestCases(rows: SheetRow[]): ParsedTestCase[] {
 
     // Yellow row = new subcategory (workflow/sub-feature)
     if (row.rowColor === 'yellow') {
-      currentSubcategory = row.what;
+      currentSubcategory = row.what || row.testStep;
       continue;
     }
 
-    // Regular row = test case
+    // Fallback: If "What" has content but Test Step is empty, it's likely a header
+    // This handles cases where color detection fails
+    if (row.what && !row.testStep && !row.systemBehaviour) {
+      // If we don't have a category yet, this is a category
+      if (!currentCategory) {
+        currentCategory = row.what;
+      } else {
+        // Otherwise it's a subcategory
+        currentSubcategory = row.what;
+      }
+      continue;
+    }
+
+    // Another fallback: "What" is empty but testStep has italic/description text (yellow row pattern)
+    if (!row.what && row.testStep && !row.systemBehaviour && row.rowColor !== 'green') {
+      // This might be a subcategory row where description is in testStep column
+      currentSubcategory = row.testStep;
+      continue;
+    }
+
+    // Regular row = test case (has test_step or system_behaviour)
     if (row.testStep || row.systemBehaviour) {
       testCases.push({
-        category: currentCategory,
+        category: currentCategory || 'General',
         subcategory: currentSubcategory,
         testStep: row.testStep,
         systemBehaviour: row.systemBehaviour,
